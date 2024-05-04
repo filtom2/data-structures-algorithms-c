@@ -1,412 +1,582 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define INT_MAX 2147483647
+#define NEKONECNO 999999999   //QUICKSORT
 
-typedef struct edge {
-    int vrchol1;
-    int vrchol2;
+typedef struct Hrana {
+    int ciel;
     int vaha;
-    struct edge* next;
-} EDGE;
+    struct Hrana* dalsi;
+} Hrana;
+
+typedef struct {
+    int from;
+    int to;
+    int weight;
+} Edge;
 
 
-typedef struct vertex{
-    EDGE* head;  
-} VERTEX;
+typedef struct { //Adjacency list
+    Hrana** zoznamSusednosti;
+    int pocetVrcholov;
+} Graf;
 
+/*typedef struct {
+    int vrchol;
+    int distance;
+    int vaha;
+} Node;*/
 
-typedef struct graph{
-    VERTEX* vertices;
-    int velkostGrafu;
-} GRAPH;
+/*typedef struct {
+    Edge* array;    
+    int capacity;   
+    int size;      
+} MinHeap;*/
 
+Graf* vytvorGraf(int pocetVrcholov) {
+    Graf* graf = (Graf*)malloc(sizeof(Graf));
+    graf->pocetVrcholov = pocetVrcholov;
+    graf->zoznamSusednosti = (Hrana**)malloc(pocetVrcholov * sizeof(Hrana*));
+    for (int i = 0; i < pocetVrcholov; i++) { //<
+        graf->zoznamSusednosti[i] = NULL;
+    }
+    return graf;
+}
 
-typedef struct heapNode{
-    int vertex; 
-    int distance; 
-} HEAPNODE;
-
-typedef struct minHeap{
-    HEAPNODE *nodes;
-    int velkost;
-    int kapacita;
-    int *pozicia; 
-} MINHEAP;
-
-
-GRAPH* createGraph(int pocetVrcholov) {
-    GRAPH* grafik = (GRAPH*)malloc(sizeof(GRAPH));
-    if (!grafik) {
+/*MinHeap* vytvorMinHeap(int capacity) {
+    MinHeap* minHeap = (MinHeap*)malloc(sizeof(MinHeap));
+    if (!minHeap) {
         return NULL;
     }
-    grafik->velkostGrafu = pocetVrcholov;
-    grafik->vertices = (VERTEX*)malloc(pocetVrcholov * sizeof(VERTEX));
-    if (!grafik->vertices) { 
-        free(grafik);
+    minHeap->capacity = capacity;
+    minHeap->size = 0;
+    minHeap->array = (Edge*)malloc(capacity * sizeof(Edge));
+    if (!minHeap->array) {
+        free(minHeap);
         return NULL;
     }
-    for (int i = 0; i < pocetVrcholov; i++) {
-        grafik->vertices[i].head = NULL;
-    }
-    return grafik;
+    return minHeap;
+}*/
+typedef struct {
+    Edge* array;
+    int capacity;
+    int size;
+    int *pos;  // Position map to track positions of vertices in the heap
+} MinHeap;
+
+
+MinHeap* vytvorMinHeap(int capacity) {
+    MinHeap* minHeap = (MinHeap*)malloc(sizeof(MinHeap));
+    minHeap->capacity = capacity;
+    minHeap->size = 0;
+    minHeap->array = (Edge*)malloc(capacity * sizeof(Edge));
+    minHeap->pos = (int*)malloc(capacity * sizeof(int));  
+    return minHeap;
+}
+
+void freeMinHeap(MinHeap* minHeap) {
+    free(minHeap->array);
+    free(minHeap->pos);
+    free(minHeap);
 }
 
 
 
-int hranaExist(GRAPH* grafik, int v1, int v2) {
-    EDGE* current1 = grafik->vertices[v1].head;
-    while (current1 != NULL) {
-        if (current1->vrchol2 == v2) {
-            return 1;
-        }
-        current1 = current1->next;
+/*void insertMinHeap(MinHeap* minHeap, Edge edge) {
+    if (minHeap->size == minHeap->capacity) {
+        return; // Heap is full, optionally resize the heap here
     }
-    EDGE* current2 = grafik->vertices[v2].head;
-    while (current2 != NULL) {
-        if (current2->vrchol2 == v1) {
-            return 1;
-        }
-        current2 = current2->next;
+    // Insert at the end and sift up
+    minHeap->array[minHeap->size] = edge;
+    int current = minHeap->size;
+    minHeap->size++;
+    while (current != 0 && minHeap->array[current].weight < minHeap->array[(current - 1) / 2].weight) {
+        Edge temp = minHeap->array[current];
+        minHeap->array[current] = minHeap->array[(current - 1) / 2];
+        minHeap->array[(current - 1) / 2] = temp;
+        current = (current - 1) / 2;
     }
-    return 0;
-}
-
-
-MINHEAP* createMinHeap(int kapacita) {
-    MINHEAP *heap = (MINHEAP *)malloc(sizeof(MINHEAP));
-    if (!heap) return NULL;
-    heap->nodes = (HEAPNODE *)malloc(kapacita * sizeof(HEAPNODE));
-    heap->pozicia = (int *)malloc(kapacita * sizeof(int));
-    heap->kapacita = kapacita;
-    heap->velkost = 0;
-    if (!heap->nodes || !heap->pozicia) {
-        free(heap->nodes);
-        free(heap->pozicia);
-        free(heap);
-        return NULL;
-    }
-    for (int i = 0; i < kapacita; i++) {
-        heap->nodes[i] = (HEAPNODE){i, INT_MAX};
-        heap->pozicia[i] = i;
-    }
-    return heap;
-}
-
-
-void swapHeapNodes(HEAPNODE *a, HEAPNODE *b) {
-    HEAPNODE temp = *a;
+}*/
+void swapEdge(Edge* a, Edge* b) {
+    Edge t = *a;
     *a = *b;
-    *b = temp;
+    *b = t;
+}
+
+void decreaseKey(MinHeap* minHeap, int v, int weight) {
+    int i = minHeap->pos[v];
+    minHeap->array[i].weight = weight;
+    while (i != 0 && minHeap->array[i].weight < minHeap->array[(i - 1) / 2].weight) {
+        minHeap->pos[minHeap->array[i].to] = (i - 1) / 2;
+        minHeap->pos[minHeap->array[(i - 1) / 2].to] = i;
+        swapEdge(&minHeap->array[i], &minHeap->array[(i - 1) / 2]);
+        i = (i - 1) / 2;
+    }
+}
+
+void insertMinHeap(MinHeap* minHeap, Edge edge) {
+    if (minHeap->size == minHeap->capacity) {
+        return; // Optionally resize the heap here
+    }
+    int i = minHeap->size;
+    minHeap->size++;
+    minHeap->array[i] = edge;
+    minHeap->pos[edge.to] = i;
+
+    // Fix the min heap property if it is violated
+    decreaseKey(minHeap, edge.to, edge.weight);
 }
 
 
-void upravMinHeap(MINHEAP *heap, int index) {
-    int smallest = index;
-    int left = 2 * index + 1;
-    int right = 2 * index + 2;
 
-    if (left < heap->velkost && heap->nodes[left].distance < heap->nodes[smallest].distance) {
+int prazdne(MinHeap* minHeap) {
+    return minHeap->size == 0;
+}
+
+/*Node extractMin(MinHeap* minHeap) {
+    if (prazdne(minHeap))
+        return (Node){-1, -1};
+    Node root = minHeap->array[0];
+    Node lastNode = minHeap->array[minHeap->velkost - 1];
+    minHeap->array[0] = lastNode;
+    minHeap->pozicia[root.vrchol] = minHeap->velkost - 1;
+    minHeap->pozicia[lastNode.vrchol] = 0;
+    --minHeap->velkost;
+    minHeapify(minHeap, 0);
+
+    return root;
+}*/
+void minHeapify(MinHeap* minHeap, int idx) {
+    int smallest = idx;
+    int left = 2 * idx + 1;
+    int right = 2 * idx + 2;
+
+    if (left < minHeap->size && minHeap->array[left].weight < minHeap->array[smallest].weight)
         smallest = left;
-    }
-    if (right < heap->velkost && heap->nodes[right].distance < heap->nodes[smallest].distance) {
+    if (right < minHeap->size && minHeap->array[right].weight < minHeap->array[smallest].weight)
         smallest = right;
-    }
-    if (smallest != index) {
-        heap->pozicia[heap->nodes[smallest].vertex] = index;
-        heap->pozicia[heap->nodes[index].vertex] = smallest;
-        swapHeapNodes(&heap->nodes[smallest], &heap->nodes[index]);
-        upravMinHeap(heap, smallest);
+
+    if (smallest != idx) {
+        Edge temp = minHeap->array[idx];
+        minHeap->array[idx] = minHeap->array[smallest];
+        minHeap->array[smallest] = temp;
+        minHeapify(minHeap, smallest);
     }
 }
 
 
-HEAPNODE extractMin(MINHEAP *heap) {
-   if (heap->velkost <= 0) {
-        return (HEAPNODE){-1, 0}; 
+Edge extractMin(MinHeap* minHeap) {
+    if (minHeap->size <= 0)
+        return (Edge){-1, -1, 0};
+    if (minHeap->size == 1) {
+        minHeap->size--;
+        return minHeap->array[0];
     }
 
-    HEAPNODE root = heap->nodes[0];
-    HEAPNODE lastNode = heap->nodes[heap->velkost - 1];
-    heap->nodes[0] = lastNode;
-    heap->pozicia[root.vertex] = heap->velkost - 1;
-    heap->pozicia[lastNode.vertex] = 0;
-    heap->velkost--;
-    upravMinHeap(heap, 0);
+    // Move the last element to root and heapify down from root
+    Edge root = minHeap->array[0];
+    minHeap->array[0] = minHeap->array[minHeap->size - 1];
+    minHeap->size--;
+    minHeapify(minHeap, 0);
     return root;
 }
 
-void decreaseKey(MINHEAP *heap, int vertexIndex, int vzdialenost) {
-    int x = heap->pozicia[vertexIndex];
-    heap->nodes[x].distance = vzdialenost;
-    while (x != 0 && heap->nodes[x].distance < heap->nodes[(x - 1) / 2].distance) {
-        heap->pozicia[heap->nodes[x].vertex] = (x - 1) / 2;
-        heap->pozicia[heap->nodes[(x - 1) / 2].vertex] = x;
-        swapHeapNodes(&heap->nodes[x], &heap->nodes[(x - 1) / 2]);
-        x = (x - 1) / 2;
+
+/*int isInMinHeap(MinHeap* minHeap, int vrchol) {
+    if (minHeap->pozicia[vrchol] < minHeap->velkost){ //< minHeap->pozicia[vrchol] >= 0 &&
+        return 1;
     }
-}
+    return -1;
+}*/
 
 
-int isInMinHeap(MINHEAP *heap, int IndexVrcholu) {
-    return heap->pozicia[IndexVrcholu] < heap->velkost ? 1 : 0;
-}
-
-
-
-// void printPath(int parent[], int vrcholCesty) {
-//     if (parent[vrcholCesty] == -1) {
-//         printf("%d", vrcholCesty);
-//         return;
-//     }
-//     printPath(parent, parent[vrcholCesty]);
-//     printf(", %d", vrcholCesty);
-// }
-
-
-void printResults(int *firstLinePrinted, const char *message) {
-    if (*firstLinePrinted) {
+void new_line() {
+    static int first_line = 1;
+    if (!first_line) {
         printf("\n");
     }
-    printf("%s failed", message);
-    *firstLinePrinted = 1;
+    first_line = 0;
 }
 
-
-
-int printPathToString(int parent[], int vrcholCesty, char *output) {
-    if (parent[vrcholCesty] == -1) {
-        return sprintf(output, "%d", vrcholCesty);
-    }
-    int len = printPathToString(parent, parent[vrcholCesty], output);
-    return len + sprintf(output + len, ", %d", vrcholCesty);
-}
-
-
-
-
-int deleteEdge(GRAPH* grafik, int v1, int v2) {
-    int found = 0;
-    EDGE **prev = &grafik->vertices[v1].head, *temp;
-    while (*prev) {
-        if ((*prev)->vrchol2 == v2) {
-            temp = *prev;
-            *prev = temp->next;
-            free(temp);
-            found = 1;
-            break;
-        }
-        prev = &((*prev)->next);
-    }
-
-    prev = &grafik->vertices[v2].head;
-    while (*prev) {
-        if ((*prev)->vrchol2 == v1) {
-            temp = *prev;
-            *prev = temp->next;
-            free(temp);
-            found = 1;
-            break;
-        }
-        prev = &((*prev)->next);
-    }
-
-    return found ? 0 : 1;  
+Hrana* vytvorHranu(int ciel, int vaha) {
+    Hrana* novaHrana = (Hrana*)malloc(sizeof(Hrana));
+    novaHrana->ciel = ciel;
+    novaHrana->vaha = vaha;
+    novaHrana->dalsi = NULL;
+    return novaHrana;
 }
 
 
 
 
-int addEdgeToGraph(GRAPH* grafik, int zdroj, int ciel, int weight) {
-    EDGE* newEdge = (EDGE*) malloc(sizeof(EDGE));
-    if (!newEdge) {
-        return 0; 
-    }
-    newEdge->vrchol1 = zdroj;
-    newEdge->vrchol2 = ciel;
-    newEdge->vaha = weight;
-    newEdge->next = grafik->vertices[zdroj].head;
-    grafik->vertices[zdroj].head = newEdge;
-    return 1;
-}
-
-
-int insertEdge(GRAPH* grafik, int v1, int v2, int vaha) {
-    if (v1 < 0 || v2 < 0 || v1 >= grafik->velkostGrafu || v2 >= grafik->velkostGrafu) {       
-        return 1; 
-    }
-    if (v1 == v2) {
-        return 1;
-    }
-    if (hranaExist(grafik, v1, v2)) {
-        return 1;
-    }
-    if (!addEdgeToGraph(grafik, v1, v2, vaha) || !addEdgeToGraph(grafik, v2, v1, vaha)) {
-        deleteEdge(grafik, v1, v2); 
-        return 1;
-    }
-    return 0;
-}
-
-
-
-int updateEdge(GRAPH* grafik, int v1, int v2, int zmenaVahy) {
-    int updated = 0;  
-    if (!hranaExist(grafik, v1, v2)) return 1;
-
-    for (EDGE* aktualnaHrana = grafik->vertices[v1].head; aktualnaHrana != NULL; aktualnaHrana = aktualnaHrana->next) {
-        if (aktualnaHrana->vrchol2 == v2) {
-            if (aktualnaHrana->vaha + zmenaVahy < 0) { 
-                return -1; 
+/*void quicksort(Edge* edges, int zac, int kon) {
+    if (zac < kon) {
+        int index = zac;
+        Edge pivot = edges[kon];
+        for (int i = zac; i < kon; i++) {
+            // Sort edges based on first vertex, and then by second vertex if first vertices are the same
+            if ((edges[i].from < pivot.from) || (edges[i].from == pivot.from && edges[i].to < pivot.to)) {
+                Edge pom = edges[i];
+                edges[i] = edges[index];
+                edges[index] = pom;
+                index++;
             }
-            aktualnaHrana->vaha += zmenaVahy;
-            updated = 1; 
-            break; 
         }
+        Edge pom2 = edges[index];
+        edges[index] = edges[kon];
+        edges[kon] = pom2;
+        quicksort(edges, zac, index - 1);
+        quicksort(edges, index + 1, kon);
     }
+}*/
 
-    for (EDGE* aktualnaHrana = grafik->vertices[v2].head; aktualnaHrana != NULL; aktualnaHrana = aktualnaHrana->next) {
-        if (aktualnaHrana->vrchol2 == v1) {
-            if (aktualnaHrana->vaha + zmenaVahy < 0) { 
-                return -1;
+
+void quicksort(Edge* edges, int zac, int kon) {
+    if (zac < kon) {
+        int index = zac;
+        Edge pivot = edges[kon];
+        for (int i = zac; i < kon; i++) {
+            if ((edges[i].from < pivot.from) || (edges[i].from == pivot.from && edges[i].to < pivot.to)) {
+                swapEdge(&edges[i], &edges[index]);  // Using swapEdge function
+                index++;
             }
-            aktualnaHrana->vaha += zmenaVahy;
-            updated = 1;
-            break;
         }
+        swapEdge(&edges[index], &edges[kon]);  // Using swapEdge function
+        quicksort(edges, zac, index - 1);
+        quicksort(edges, index + 1, kon);
     }
-    return updated ? 0 : -1;  
-}
-
-
-
-// int updateEdge(GRAPH* grafik, int v1, int v2, int zmenaVahy) {
-//     if (!hranaExist(grafik, v1, v2)) return 1;  // Hrana neexistuje
-
-//     int updated = 0;  
-//     for (int i = 0; i < 2; i++) {
-//         int src = i == 0 ? v1 : v2;  
-//         int dst = i == 0 ? v2 : v1;  
-
-//         for (EDGE* aktualnaHrana = grafik->vertices[src].head; aktualnaHrana != NULL; aktualnaHrana = aktualnaHrana->next) {
-//             if (aktualnaHrana->vrchol2 == dst) {
-//                 if (aktualnaHrana->vaha + zmenaVahy < 0) {  
-//                     return 1;  
-//                 }
-//                 aktualnaHrana->vaha += zmenaVahy;
-//                 updated = 1;
-//                 break;
-//             }
-//         }
-//     }
-
-//     return updated ? 0 : 1;  
-// }
-
-
-
-
-
-
-int compareEdges(const void *a, const void *b) {
-    EDGE *edge1 = (EDGE *)a;
-    EDGE *edge2 = (EDGE *)b;
-    int minVertex1 = edge1->vrchol1 < edge1->vrchol2 ? edge1->vrchol1 : edge1->vrchol2;
-    int maxVertex1 = edge1->vrchol1 > edge1->vrchol2 ? edge1->vrchol1 : edge1->vrchol2;
-    int minVertex2 = edge2->vrchol1 < edge2->vrchol2 ? edge2->vrchol1 : edge2->vrchol2;
-    int maxVertex2 = edge2->vrchol1 > edge2->vrchol2 ? edge2->vrchol1 : edge2->vrchol2;
-
-    if (minVertex1 != minVertex2) return minVertex1 - minVertex2;
-    return maxVertex1 - maxVertex2;
-}
-
-
-void printMSTResult(EDGE mstEdges[], int mstSize, int *firstLinePrinted) {
-    if (*firstLinePrinted) {
-        printf("\n");
-    } else {
-        *firstLinePrinted = 1;
-    }
-    int totalWeight = 0;
-    for (int i = 0; i < mstSize; i++) {
-        if (mstEdges[i].vrchol1 > mstEdges[i].vrchol2) {
-            int temp = mstEdges[i].vrchol1;
-            mstEdges[i].vrchol1 = mstEdges[i].vrchol2;
-            mstEdges[i].vrchol2 = temp;
-        }
-        totalWeight += mstEdges[i].vaha;
-    }
-    qsort(mstEdges, mstSize, sizeof(EDGE), compareEdges);
-
-    printf("%d: [", totalWeight);
-    for (int i = 0; i < mstSize; i++) {
-        printf("(%d, %d)", mstEdges[i].vrchol1, mstEdges[i].vrchol2);
-        if (i < mstSize - 1) {
-            printf(", ");
-        }
-    }
-    printf("]");
 }
 
 
 
 
 
-void search(GRAPH *grafik, int src, int *firstLinePrinted) {
-    int V = grafik->velkostGrafu;
-    if (src < 0 || src >= V) { 
-        if (*firstLinePrinted) printf("\n");
-        printf("search %d failed", src);
-        *firstLinePrinted = 1;
+/*void primMST(Graf* graf, int startVertex) {
+    if (startVertex < 0 || startVertex >= graf->pocetVrcholov || graf->zoznamSusednosti[startVertex] == NULL) {
+        printf("search %d failed\n", startVertex);
         return;
     }
-    int parent[V], key[V], mstSet[V];
-    EDGE mstEdges[V-1];
+
+    int V = graf->pocetVrcholov;
+    int parent[V], key[V];
+    char mstSet[V]; // This array keeps track of vertices included in MST
+    unsigned long long mst_weight = 0;
 
     for (int i = 0; i < V; i++) {
-        key[i] = INT_MAX;
+        key[i] = NEKONECNO;
         mstSet[i] = 0;
         parent[i] = -1;
     }
 
-    key[src] = 0;
-    parent[src] = -1;
+    MinHeap* minHeap = vytvorMinHeap(V);
+    key[startVertex] = 0;
+    insertMinHeap(minHeap, (Edge){-1, startVertex, 0});
 
-    for (int count = 0; count < V - 1; count++) {
-        int u = -1, min = INT_MAX;
+    /*while (!prazdne(minHeap)) {
+        Edge minEdge = extractMin(minHeap);
+        int u = minEdge.to;
 
-        for (int v = 0; v < V; v++) {
-            if (mstSet[v] == 0 && key[v] < min) {
-                min = key[v], u = v;
-            }
-        }
+        if (!mstSet[u]) {
+            mstSet[u] = 1; // Mark this vertex as included in MST
+            mst_weight += minEdge.weight;
 
-        if (u == -1) break;  
-        mstSet[u] = 1;
-
-        for (EDGE* p = grafik->vertices[u].head; p != NULL; p = p->next) {
-            int v = p->vrchol2;
-            if (mstSet[v] == 0 && p->vaha < key[v]) {
-                parent[v] = u, key[v] = p->vaha;
+            // For each adjacent vertex v of u, check if v is in mstSet
+            for (Hrana* crawler = graf->zoznamSusednosti[u]; crawler != NULL; crawler = crawler->dalsi) {
+                int v = crawler->ciel;
+                if (!mstSet[v] && crawler->vaha < key[v]) {
+                    key[v] = crawler->vaha;
+                    parent[v] = u;
+                    insertMinHeap(minHeap, (Edge){u, v, crawler->vaha});
+                }
             }
         }
     }
 
-    int mstSize = 0;
-    for (int i = 1; i < V; i++) {
+    // Collect all edges in the MST for sorting and output.
+    Edge* edges = malloc((V - 1) * sizeof(Edge));
+    int count = 0;
+    for (int i = 0; i < V; i++) {
         if (parent[i] != -1) {
-            mstEdges[mstSize++] = (EDGE){parent[i], i, key[i]};
+            if (i < parent[i])
+                edges[count++] = (Edge){i, parent[i], key[i]};
+            else
+                edges[count++] = (Edge){parent[i], i, key[i]};
         }
     }
 
-    if (mstSize > 0) {
-        printMSTResult(mstEdges, mstSize, firstLinePrinted);
-    } else {
-        if (*firstLinePrinted) {
-        printf("\n");
+    // Quicksort the edges for consistent output.
+    quicksort(edges, 0, count - 1);
+
+    printf("%llu: [", mst_weight);
+    for (int i = 0; i < count; i++) {
+        printf("(%d, %d)", edges[i].from, edges[i].to);
+        if (i < count - 1) printf(", ");
+    }
+    printf("]\n");
+
+    free(edges);
+    freeMinHeap(minHeap);
+}
+*/
+void primMST(Graf* graf, int startVertex) {
+    if (startVertex < 0 || startVertex >= graf->pocetVrcholov || graf->zoznamSusednosti[startVertex] == NULL) {
+        printf("search %d failed\n", startVertex);
+        return;
+    }
+
+    int V = graf->pocetVrcholov;
+    int parent[V], key[V];
+    char mstSet[V]; // This array keeps track of vertices included in MST
+    unsigned long long mst_weight = 0;
+
+    for (int i = 0; i < V; i++) {
+        key[i] = NEKONECNO;
+        mstSet[i] = 0;
+        parent[i] = -1;
+    }
+
+    MinHeap* minHeap = vytvorMinHeap(V);
+    for (int i = 0; i < V; i++) {
+        minHeap->pos[i] = i;
+        minHeap->array[i] = (Edge){-1, i, key[i]};
+    }
+    minHeap->size = V;
+    decreaseKey(minHeap, startVertex, 0);
+
+    while (!prazdne(minHeap)) {
+        Edge minEdge = extractMin(minHeap);
+        int u = minEdge.to;
+
+        mstSet[u] = 1; // Mark this vertex as included in MST
+        mst_weight += minEdge.weight;
+
+        // For each adjacent vertex v of u, check if v is in mstSet
+        for (Hrana* crawler = graf->zoznamSusednosti[u]; crawler != NULL; crawler = crawler->dalsi) {
+            int v = crawler->ciel;
+            if (!mstSet[v] && crawler->vaha < key[v]) {
+                key[v] = crawler->vaha;
+                parent[v] = u;
+                decreaseKey(minHeap, v, crawler->vaha);
+            }
         }
-        printf("search %d failed", src);
-        *firstLinePrinted = 1;
+    }
+
+    // Output edges and weight
+    printf("%llu: [", mst_weight);
+    for (int i = 0; i < V; i++) {
+        if (parent[i] != -1) {
+            printf("(%d, %d)", parent[i], i);
+            if (i < V - 1) printf(", ");
+        }
+    }
+    printf("]\n");
+
+    //free(edges);
+    freeMinHeap(minHeap);
+}
+
+
+
+
+int vlozHranu(Graf* graf, int zaciatok, int ciel, int vaha) {
+    if (zaciatok < 0 || ciel < 0 || zaciatok >= graf->pocetVrcholov || ciel >= graf->pocetVrcholov || zaciatok == ciel) {
+        //printf("Insert failed: Invalid indices or same vertex (%d, %d)\n", zaciatok, ciel);
+        return 0;
+    }
+
+    
+    Hrana* explorer_zaciatok = graf->zoznamSusednosti[zaciatok];
+    while (explorer_zaciatok != NULL) {
+        if (explorer_zaciatok->ciel == ciel) {
+            //printf("Insert failed: Edge already exists (%d, %d)\n", zaciatok, ciel);
+            return 0;
+        }
+        explorer_zaciatok = explorer_zaciatok->dalsi;
+    }
+
+    Hrana* explorer_ciel = graf->zoznamSusednosti[ciel];
+    while (explorer_ciel != NULL) {
+        if (explorer_ciel->ciel == zaciatok) {
+            //printf("Insert failed: Edge already exists (%d, %d)\n", ciel, zaciatok);
+            return 0;
+        }
+        explorer_ciel = explorer_ciel->dalsi;
+    }
+
+    // Add edge from zaciatok to ciel
+    Hrana* newEdge = vytvorHranu(ciel, vaha);
+    newEdge->dalsi = graf->zoznamSusednosti[zaciatok];
+    graf->zoznamSusednosti[zaciatok] = newEdge;
+
+    // Add edge from ciel to zaciatok
+    newEdge = vytvorHranu(zaciatok, vaha);
+    newEdge->dalsi = graf->zoznamSusednosti[ciel];
+    graf->zoznamSusednosti[ciel] = newEdge;
+
+    //printf("Edge successfully inserted: %d <-> %d with weight %d\n", zaciatok, ciel, vaha);
+    return 1;
+}
+
+
+
+//delete
+/*int odstranHranu(Graf* graf, int zaciatok, int ciel) {
+    if (zaciatok < 0 || ciel < 0 || zaciatok >= graf->pocetVrcholov || ciel >= graf->pocetVrcholov) {
+        new_line();
+        printf("delete %d %d failed", zaciatok, ciel);
+        return 0;
+    }
+    Hrana** curr = &graf->zoznamSusednosti[zaciatok];
+    int removed = 0;
+    while (*curr != NULL) {
+        Hrana* entry = *curr;
+        if (entry->ciel == ciel) {
+            *curr = entry->dalsi;
+            free(entry);
+            removed = 1; 
+            break;
+        }
+        curr = &entry->dalsi;
+    }
+
+    if (removed) {
+        removed = 0; 
+        curr = &graf->zoznamSusednosti[ciel];
+        while (*curr != NULL) {
+            Hrana* entry = *curr;
+            if (entry->ciel == zaciatok) {
+                *curr = entry->dalsi;
+                free(entry);
+                removed = 1; 
+                break;
+            }
+            curr = &entry->dalsi;
+        }
+    }
+
+    if (!removed) {
+        new_line();
+        printf("delete %d %d failed", zaciatok, ciel);
+    }
+
+    return removed; 
+}*/
+
+
+int odstranHranu(Graf* graf, int zaciatok, int ciel) {
+    if (zaciatok < 0 || ciel < 0 || zaciatok >= graf->pocetVrcholov || ciel >= graf->pocetVrcholov) {
+        new_line();
+        //printf("delete %d %d failed", zaciatok, ciel);
+        return 0;
+    }
+
+    // Remove edge from zaciatok to ciel
+    Hrana** curr = &graf->zoznamSusednosti[zaciatok];
+    int removed = 0;
+    while (*curr != NULL) {
+        Hrana* entry = *curr;
+        if (entry->ciel == ciel) {
+            *curr = entry->dalsi;
+            free(entry);
+            removed = 1; 
+            break;
+        }
+        curr = &entry->dalsi;
+    }
+
+    if (!removed) {
+        new_line();
+        //printf("delete %d %d failed", zaciatok, ciel);
+        return 0;
+    }
+
+    // Remove edge from ciel to zaciatok
+    curr = &graf->zoznamSusednosti[ciel];
+    while (*curr != NULL) {
+        Hrana* entry = *curr;
+        if (entry->ciel == zaciatok) {
+            *curr = entry->dalsi;
+            free(entry);
+            break;
+        }
+        curr = &entry->dalsi;
+    }
+
+    return 1; 
+}
+
+
+
+
+//update
+/*int aktualizujHranu(Graf* graf, int zaciatok, int ciel, int zmenaVahy) {
+    int aktualizovane = 0;
+    Hrana* ptr = graf->zoznamSusednosti[zaciatok];
+    while (ptr != NULL) {
+        if (ptr->ciel == ciel) {
+            if (ptr->vaha + zmenaVahy >= 0) {
+                ptr->vaha += zmenaVahy;
+                aktualizovane = 1;
+            } else {
+                new_line();
+                printf("update %d %d failed", zaciatok, ciel);
+                return 0;
+            }
+            break;
+        }
+        ptr = ptr->dalsi;
+    }
+
+    ptr = graf->zoznamSusednosti[ciel];
+    while (ptr != NULL && aktualizovane) {
+        if (ptr->ciel == zaciatok) {
+            ptr->vaha += zmenaVahy;
+            break;
+        }
+        ptr = ptr->dalsi;
+    }
+
+    if (!aktualizovane) {
+        new_line();
+        printf("update %d %d failed", zaciatok, ciel);
+        return 0;
+    }
+
+    return 1; // Success
+}*/
+int aktualizujHranu(Graf* graf, int zaciatok, int ciel, int zmenaVahy) {
+    int aktualizovane = 0;
+    Hrana* ptr = graf->zoznamSusednosti[zaciatok];
+    while (ptr != NULL) {
+        if (ptr->ciel == ciel) {
+            if (ptr->vaha + zmenaVahy >= 0) {
+                ptr->vaha += zmenaVahy;
+                aktualizovane = 1;
+            } else {
+                new_line();
+                printf("update %d %d failed: weight would be negative\n", zaciatok, ciel);
+                return 0;
+            }
+            break;
+        }
+        ptr = ptr->dalsi;
+    }
+
+    if (aktualizovane) {
+       
+        ptr = graf->zoznamSusednosti[ciel];
+        while (ptr != NULL) {
+            if (ptr->ciel == zaciatok) {
+                ptr->vaha += zmenaVahy;
+                break;
+            }
+            ptr = ptr->dalsi;
+        }
+        return 1; // Success
+    } else {
+        new_line();
+        printf("update %d %d failed: edge not found\n", zaciatok, ciel);
+        return 0;
     }
 }
 
@@ -415,65 +585,65 @@ void search(GRAPH *grafik, int src, int *firstLinePrinted) {
 
 
 
-void freeGraph(GRAPH* grafik) {
-    for (int i = 0; i < grafik->velkostGrafu; i++) {
-        EDGE* current = grafik->vertices[i].head;
-        while (current != NULL) {
-            EDGE* temp = current;
-            current = current->next;
+
+
+void uvolniGraf(Graf* graf) {
+    if (graf == NULL) return;
+    
+    for (int i = 0; i < graf->pocetVrcholov; i++) {
+        Hrana* hrana = graf->zoznamSusednosti[i];
+        while (hrana != NULL) {
+            Hrana* temp = hrana;
+            hrana = hrana->dalsi;
             free(temp);
         }
     }
-    free(grafik->vertices);
-    free(grafik);
+    free(graf->zoznamSusednosti);
+    free(graf);
 }
 
-
 int main() {
-    int N, v1, v2, weight;
-    int firstLinePrinted = 0;
-    char command;
+    int N;
     scanf("%d", &N);
-    GRAPH* graf = createGraph(N);
-    if (!graf) return 1;
+    Graf* graf = vytvorGraf(N);
 
-    while (scanf(" (%d, %d, %d)", &v1, &v2, &weight) == 3) {
-        if (insertEdge(graf, v1, v2, weight) != 0) {
-            printResults(&firstLinePrinted, "insert");
-        }
+    for (int i = 0; i < N; i++) {
+        int zaciatok, ciel;
+        long long vaha;
+        scanf(" (%d, %d, %lld)", &zaciatok, &ciel, &vaha);
+        vlozHranu(graf, zaciatok, ciel, vaha);
     }
 
-    while (scanf(" %c", &command) != EOF) {
-        switch (command) {
+    char operacia;
+    int zaciatok, ciel;
+    long long vaha;
+
+    while (scanf(" %c", &operacia) != EOF) {
+        switch (operacia) {
             case 'i':
-                if (scanf(" %d %d %d", &v1, &v2, &weight) == 3) {
-                    if (insertEdge(graf, v1, v2, weight) != 0) {
-                        printResults(&firstLinePrinted, "insert");
-                    }
+                if (scanf(" %d %d %lld", &zaciatok, &ciel, &vaha) == 3) {
+                    //printf("Trying to insert edge between %d and %d with weight %d\n", zaciatok, ciel, vaha);
+                    vlozHranu(graf, zaciatok, ciel, vaha);
                 }
                 break;
             case 'd':
-                if (scanf(" %d %d", &v1, &v2) == 2) {
-                    if (deleteEdge(graf, v1, v2) != 0) {
-                        printResults(&firstLinePrinted, "delete");
-                    }
-                }
-                break;
-            case 's':
-                if (scanf(" %d", &v1) == 1) {
-                    search(graf, v1, &firstLinePrinted);
+                if (scanf(" %d %d", &zaciatok, &ciel) == 2) {
+                    odstranHranu(graf, zaciatok, ciel);
                 }
                 break;
             case 'u':
-                if (scanf(" %d %d %d", &v1, &v2, &weight) == 3) {
-                    if (updateEdge(graf, v1, v2, weight) != 0) {
-                        printResults(&firstLinePrinted, "update");
-                    }
+                if (scanf(" %d %d %lld", &zaciatok, &ciel, &vaha) == 3) {
+                    aktualizujHranu(graf, zaciatok, ciel, vaha);
+                }
+                break;
+            case 's':
+                if (scanf(" %d", &zaciatok) == 1) {
+                    primMST(graf, zaciatok);
                 }
                 break;
         }
     }
 
-    freeGraph(graf);
+    uvolniGraf(graf);
     return 0;
 }
